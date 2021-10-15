@@ -7,9 +7,10 @@ import (
 )
 
 type Server struct {
-	running  bool
-	shutdown bool
-	listener net.Listener
+	running  	bool
+	shutdown 	bool
+	address		string
+	listener 	net.Listener
 
 	shutdownComplete chan struct{}
 }
@@ -75,7 +76,7 @@ func (s *Server) StartLoop(clr chan struct{}) {
 		}
 	}()
 
-	l, err := net.Listen("tcp", "127.0.0.1:8090")
+	l, err := net.Listen("tcp", s.address)
 	if err != nil {
 		fmt.Println("ListenFailed")
 	}
@@ -87,9 +88,10 @@ func (s *Server) StartLoop(clr chan struct{}) {
 	go s.acceptConnect(func(conn net.Conn) { s.createSession(conn) })
 }
 
-func NewServer() (*Server, error) {
+func NewServer(addr string) (*Server, error) {
 	s := &Server{
 		shutdown: false,
+		address: addr,
 	}
 
 	return s, nil
