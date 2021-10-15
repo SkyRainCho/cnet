@@ -23,9 +23,9 @@ func (s *Server) isRunning() bool {
 }
 
 func (s *Server) Start() {
-	clientListenReady := make(chan struct{})
+	sessionListenReady := make(chan struct{})
 
-	s.StartLoop(clientListenReady)
+	s.StartLoop(sessionListenReady)
 }
 
 func (s *Server) startRoutine(f func()) bool {
@@ -37,11 +37,11 @@ func (s *Server) startRoutine(f func()) bool {
 	return started
 }
 
-func (s *Server) createClient(conn net.Conn) *client {
-	c := &client{
+func (s *Server) createSession(conn net.Conn) *session {
+	c := &session{
 		cn: conn,
 	}
-	fmt.Println("Server::createClient")
+	fmt.Println("Server::createSession")
 
 	c.lock.Lock()
 	c.pending.cond = sync.NewCond(&(c.lock))
@@ -62,7 +62,7 @@ func (s *Server) acceptConnect(createFunc func(conn net.Conn)) {
 		}
 
 		s.startRoutine(func() {
-			fmt.Println("Prepare create client in routine")
+			fmt.Println("Prepare create session in routine")
 			createFunc(conn)
 		})
 	}
@@ -84,7 +84,7 @@ func (s *Server) StartLoop(clr chan struct{}) {
 	s.running = true
 
 	//启动一个监听协程用于接收网络连接，创建客户端
-	go s.acceptConnect(func(conn net.Conn) { s.createClient(conn) })
+	go s.acceptConnect(func(conn net.Conn) { s.createSession(conn) })
 }
 
 func NewServer() (*Server, error) {
