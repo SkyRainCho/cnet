@@ -7,10 +7,13 @@ import (
 )
 
 type Server struct {
-	running  	bool
-	shutdown 	bool
-	address		string
-	listener 	net.Listener
+	nextSID  int64
+	running  bool
+	shutdown bool
+	address  string
+	listener net.Listener
+
+	connMap map[int64]*Session
 
 	shutdownComplete chan struct{}
 }
@@ -38,8 +41,9 @@ func (s *Server) startRoutine(f func()) bool {
 	return started
 }
 
-func (s *Server) createSession(conn net.Conn) *session {
-	c := &session{
+func (s *Server) createSession(conn net.Conn) *Session {
+	c := &Session{
+		id: s.nextSID,
 		cn: conn,
 	}
 	fmt.Println("Server::createSession")
@@ -47,6 +51,8 @@ func (s *Server) createSession(conn net.Conn) *session {
 	c.lock.Lock()
 	c.pending.cond = sync.NewCond(&(c.lock))
 	c.lock.Unlock()
+
+	s.connMap[c.id] = c
 
 	s.startRoutine(func() { c.Read() })
 
@@ -90,8 +96,10 @@ func (s *Server) StartLoop(clr chan struct{}) {
 
 func NewServer(addr string) (*Server, error) {
 	s := &Server{
+		nextSID:  1,
 		shutdown: false,
-		address: addr,
+		address:  addr,
+		connMap:  make(map[int64]*Session),
 	}
 
 	return s, nil

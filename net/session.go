@@ -13,23 +13,26 @@ type output struct {
 	cond *sync.Cond
 }
 
-type session struct {
+//每个Session都应该具有一个SessionID用于唯一标记
+//同时具有一个输出缓冲区
+type Session struct {
+	id      int64
 	cn      net.Conn
 	lock    sync.Mutex
 	pending output
 }
 
-func (c *session) CloseConnect() {
+func (c *Session) CloseConnect() {
 	c.cn.Close()
 }
 
-func (c *session) FillPendingData(data []byte, length int) {
+func (c *Session) FillPendingData(data []byte, length int) {
 	c.pending.length += length
 	c.pending.data = append(c.pending.data, data[:length]...)
 	c.pending.cond.Signal()
 }
 
-func (c *session) FlushPendingData() {
+func (c *Session) FlushPendingData() {
 	fmt.Printf("Session::FlushPendingData::%d\n", c.pending.length)
 	_, err := c.cn.Write(c.pending.data[:c.pending.length])
 	if err != nil {
@@ -39,7 +42,7 @@ func (c *session) FlushPendingData() {
 	c.pending.data = c.pending.data[0:0]
 }
 
-func (c *session) Read() {
+func (c *Session) Read() {
 	fmt.Println("Session::Read")
 
 	//创建一个读取缓冲区
@@ -56,7 +59,7 @@ func (c *session) Read() {
 	}
 }
 
-func (c *session) Write() {
+func (c *Session) Write() {
 	fmt.Println("Session::Write")
 
 	//输出缓冲区之中没有数据的话，协程等待
