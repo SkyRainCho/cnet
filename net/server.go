@@ -30,6 +30,18 @@ func (s *Server) Start(callback OnSessionCreate) {
 	s.StartEventLoop(callback)
 
 	s.waitgroup.Wait()
+
+	s.onServerStop()
+}
+
+func (s *Server) Stop() {
+	fmt.Println("Server::Stop")
+	s.shutdown = true
+	s.waitgroup.Done()
+}
+
+func (s *Server) onServerStop() {
+	fmt.Println("Server::onServerStop")
 }
 
 func (s *Server) startRoutine(f func()) bool {
@@ -66,6 +78,9 @@ func (s *Server) acceptConnect(createFunc func(conn net.Conn)) {
 	}()
 
 	for {
+		if s.shutdown {
+			break
+		}
 		conn, err := s.listener.Accept()
 		if err != nil {
 			fmt.Println("Accept Failed")
@@ -81,10 +96,6 @@ func (s *Server) acceptConnect(createFunc func(conn net.Conn)) {
 
 func (s *Server) StartEventLoop(callback OnSessionCreate) {
 	s.waitgroup.Add(1)
-
-	defer func() {
-		fmt.Println("Server::EndEventLoop")
-	}()
 
 	l, err := net.Listen("tcp", s.address)
 	if err != nil {

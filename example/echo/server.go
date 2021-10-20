@@ -2,6 +2,9 @@ package example
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	cnet "github.com/SkyRainCho/cnet/net"
 )
@@ -54,6 +57,15 @@ func RunServer(address string) {
 	if err != nil {
 		fmt.Println("NewServer::Failed")
 	}
+	sigChan := make(chan os.Signal)
+
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigChan
+		fmt.Println("EchoServer::ReceiveSignal:", sig)
+		s.Stop()
+	}()
 
 	s.Start(func(s *cnet.Session) {
 		fmt.Println("Session::OnSessionCreate:", s.GetSessionID())
