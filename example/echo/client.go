@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"net"
 	"time"
+
+	cnet "github.com/SkyRainCho/cnet/net"
 )
 
 var msg_list = []string{
@@ -15,6 +17,10 @@ var msg_list = []string{
 	"I live in BeiJing",
 	"How are you?",
 	"I am fine, and you?",
+}
+
+type EchoClient struct {
+	session cnet.Session
 }
 
 func RunClient(address string) {
