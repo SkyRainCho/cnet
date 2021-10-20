@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -13,7 +12,6 @@ import (
 type Session struct {
 	id           int64
 	cn           net.Conn
-	lock         sync.Mutex
 	ioHandler    IOHandler
 	eventHandler EventHandler
 
@@ -34,20 +32,15 @@ func (s *Session) SetEventHandler(event EventHandler) {
 func (s *Session) WriteMsgToPending(msg interface{}) {
 	fmt.Println("Session::WriteMsgToPending")
 
-	timer := time.NewTimer(2 * 1e9)
-
-	select {
-	case s.writeQueue <- msg:
-		break
-	case <-timer.C:
-		fmt.Println("Session::WriteMsgToPending::Timeout")
+	if v, ok := msg.([]byte); ok {
+		fmt.Println("EchoServerEventHandler::WriteMsgToPending::", string(v))
 	}
+	s.writeQueue <- msg
 
 	fmt.Println("Session::WriteMsgToPending::SendSuccess")
 }
 
 func (s *Session) WriteBytes(pkg []byte) error {
-	// this.conn.SetWriteDeadline(time.Now().Add(this.wDeadline))
 	_, err := s.cn.Write(pkg)
 	return err
 }
@@ -64,10 +57,11 @@ func (s *Session) StartEventLoop() {
 	//启动协程用于处理io输入输出
 	go s.runDecodeLoop()
 	go s.runProcessLoop()
+	go s.runEncodeLoop()
 }
 
 func (s *Session) runDecodeLoop() {
-	fmt.Println("Seesion::runInputLoop")
+	fmt.Println("Seesion::runDecodeLoop")
 	//尝试从缓冲区之中读取数据，并将其进行解码反序列化
 	//如果反序列化成功，则将反序序列话的数据放入readQueue
 
@@ -81,11 +75,11 @@ func (s *Session) runDecodeLoop() {
 	for {
 		bufLen = 0
 		for {
-			fmt.Println("Seesion::runInputLoop::ReadRawDataFromSocket")
+			fmt.Println("Seesion::runDecodeLoop::ReadRawDataFromSocket")
 			bufLen, err = s.cn.Read(buf)
 
 			if err != nil {
-				fmt.Println("Seesion::runInputLoop::ReadFaile:", err.Error())
+				fmt.Println("Seesion::runDecodeLoop::ReadFaile:", err.Error())
 				exit = true
 				break
 			}
@@ -125,22 +119,33 @@ func (s *Session) runDecodeLoop() {
 }
 
 func (s *Session) runProcessLoop() {
-	fmt.Println("Seesion::runOutPutLoop")
-	//从readQueue之中读取一个结构化数据，对其进行处理
-	//如果需要返回，可以在OnHandleMsg中，调用Write接口，将其写入writeQueue这个输出缓冲区里，
+	fmt.Println("Seesion::runProcessLoop")
 	var (
-		inputMsg  interface{}
-		outputMsg interface{}
+		inputMsg interface{}
 	)
 	ticker := time.NewTicker(1e9)
 	for {
 		select {
 		case inputMsg = <-s.readQueue:
+			fmt.Println("Seesion::runProcessLoop::readQueueReady")
 			s.eventHandler.OnHandleMsg(s, inputMsg)
-		case outputMsg = <-s.writeQueue:
-			s.ioHandler.Write(s, outputMsg)
 		case <-ticker.C:
 			s.eventHandler.OnHeartbeat(s)
+		}
+	}
+}
+
+func (s *Session) runEncodeLoop() {
+	fmt.Println("Seesion::runEncodeLoop")
+	var (
+		outputMsg interface{}
+	)
+
+	for {
+		select {
+		case outputMsg = <-s.writeQueue:
+			fmt.Println("Seesion::runEncodeLoop::writeQueueReady")
+			s.ioHandler.Write(s, outputMsg)
 		}
 	}
 }
