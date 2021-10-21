@@ -61,7 +61,8 @@ func (s *Server) createSession(conn net.Conn) *Session {
 		id:         s.nextSID,
 		cn:         conn,
 		readQueue:  make(chan interface{}),
-		writeQueue: make(chan interface{}, 3),
+		writeQueue: make(chan interface{}),
+		done:       make(chan interface{}),
 	}
 	fmt.Println("Server::createSession")
 

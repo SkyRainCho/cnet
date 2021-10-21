@@ -3,7 +3,9 @@ package cnet
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -17,6 +19,9 @@ type Session struct {
 
 	readQueue  chan interface{}
 	writeQueue chan interface{}
+
+	once sync.Once
+	done chan interface{}
 }
 
 func (s *Session) SetIOHandler(io IOHandler) {
@@ -52,7 +57,9 @@ func (s *Session) StartEventLoop() {
 	s.writeQueue = make(chan interface{})
 
 	//初次启动事件循环，需要调动EventHandler的OnConnect的接口来处理建立连接的回调函数
-	s.eventHandler.OnConnect(s)
+	if err := s.eventHandler.OnConnect(s); err != nil {
+		s.CloseConnect()
+	}
 
 	//启动协程用于处理io输入输出
 	go s.runDecodeLoop()
@@ -72,14 +79,27 @@ func (s *Session) runDecodeLoop() {
 	var msgLen int
 	var bufLen int
 	exit := false
+
+	defer func() {
+		s.close()
+	}()
 	for {
+
+		if s.IsClosed() {
+			break
+		}
+
 		bufLen = 0
 		for {
 			fmt.Println("Seesion::runDecodeLoop::ReadRawDataFromSocket")
 			bufLen, err = s.cn.Read(buf)
 
 			if err != nil {
-				fmt.Println("Seesion::runDecodeLoop::ReadFaile:", err.Error())
+				if err == io.EOF {
+					fmt.Println("Seesion::runDecodeLoop::CloseByTarget")
+				} else {
+					fmt.Println("Seesion::runDecodeLoop::ReadFaile:", err.Error())
+				}
 				exit = true
 				break
 			}
@@ -142,17 +162,35 @@ func (s *Session) runEncodeLoop() {
 	)
 
 	for {
-		select {
-		case outputMsg = <-s.writeQueue:
-			fmt.Println("Seesion::runEncodeLoop::writeQueueReady")
-			s.ioHandler.Write(s, outputMsg)
-		}
+		outputMsg = <-s.writeQueue
+		fmt.Println("Seesion::runEncodeLoop::writeQueueReady")
+		s.ioHandler.Write(s, outputMsg)
 	}
 }
 
 func (s *Session) GetSessionID() int64 {
 	return s.id
 }
-func (c *Session) CloseConnect() {
-	c.cn.Close()
+
+func (s *Session) close() {
+	fmt.Println("Session::close")
+	select {
+	case <-s.done:
+		return
+	default:
+		s.once.Do(func() { close(s.done) })
+	}
+}
+func (s *Session) CloseConnect() {
+	fmt.Println("Session::CloseConnect")
+	s.close()
+}
+
+func (s *Session) IsClosed() bool {
+	select {
+	case <-s.done:
+		return true
+	default:
+		return false
+	}
 }
